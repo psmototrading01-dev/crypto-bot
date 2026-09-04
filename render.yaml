@@ -1,8 +1,8 @@
 services:
   - type: web
-    name: crypto-5m-vwap-ema921-rsi-adx-telegram-bot
+    name: crypto-5m-confirmation-vwap-ema920-rsi-adx-bot
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python main_crypto_mandatory.py
+    buildCommand: pip install -r requirements_confirmation_bots.txt
+    startCommand: python main_crypto_confirmation_bot.py
     healthCheckPath: /health
