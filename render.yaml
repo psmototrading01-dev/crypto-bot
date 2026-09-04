@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: crypto-5m-vwap-ema921-rsi-adx-telegram-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main_crypto_mandatory.py
+    healthCheckPath: /health
