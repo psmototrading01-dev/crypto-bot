@@ -24,7 +24,7 @@ from flask import Flask, jsonify
 # NO AUTOMATIC ORDERS ARE PLACED.
 # ============================================================
 
-BOT_NAME = os.getenv("BOT_NAME", "Crypto 5M VWAP EMA9/21 RSI ADX Options Bot")
+BOT_NAME = os.getenv("BOT_NAME", "Crypto 5M VWAP EMA9/20 RSI ADX Options Bot")
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8643574412:AAFJXnkpGXuQhMXBCbbwZxsehPHlFmJkO0c").strip()
 TG_CHAT = os.getenv("TELEGRAM_CHAT_ID", "8991485495").strip()
 
