@@ -12,7 +12,7 @@ from flask import Flask, jsonify
 #
 # MANDATORY SIGNAL PARAMETERS:
 #   1. VWAP
-#   2. EMA 9 / EMA 21
+#   2. EMA 9 / EMA 20
 #   3. RSI 14
 #   4. ADX 14
 #
@@ -37,13 +37,13 @@ SCAN_SLEEP = float(os.getenv("SCAN_SLEEP", "2.0"))
 
 # ---------------- MANDATORY PARAMETERS ----------------
 EMA_FAST = 9
-EMA_SLOW = 21
+EMA_SLOW = 20
 RSI_LEN = 14
 ADX_LEN = 14
 VWAP_REQUIRED = True
 
 # Signal thresholds
-MIN_ADX = float(os.getenv("MIN_ADX", "18"))
+MIN_ADX = float(os.getenv("MIN_ADX", "20"))
 STRONG_ADX = float(os.getenv("STRONG_ADX", "25"))
 RSI_LONG = float(os.getenv("RSI_LONG", "55"))
 RSI_SHORT = float(os.getenv("RSI_SHORT", "45"))
@@ -229,9 +229,9 @@ def build_indicators(rows):
     d = pd.DataFrame(rows).copy()
     d = d.sort_values("open_time").drop_duplicates("open_time").reset_index(drop=True)
 
-    # MANDATORY: EMA 9 / EMA 21
+    # MANDATORY: EMA 9 / EMA 20
     d["ema9"] = d.close.ewm(span=EMA_FAST, adjust=False).mean()
-    d["ema21"] = d.close.ewm(span=EMA_SLOW, adjust=False).mean()
+    d["ema20"] = d.close.ewm(span=EMA_SLOW, adjust=False).mean()
 
     # MANDATORY: RSI 14
     d["rsi"] = rsi(d.close, RSI_LEN)
@@ -256,7 +256,7 @@ def build_indicators(rows):
 
     rng = (d.high - d.low).replace(0, np.nan)
     d["body"] = (d.close - d.open).abs() / rng
-    d["ema_gap_atr"] = (d.ema9 - d.ema21).abs() / d.atr.replace(0, np.nan)
+    d["ema_gap_atr"] = (d.ema9 - d.ema20).abs() / d.atr.replace(0, np.nan)
 
     return d
 
@@ -269,16 +269,16 @@ def score(c, side, early=False):
     s = 0
 
     if side == "LONG":
-        s += 2 if c.ema9 > c.ema21 else 0
+        s += 2 if c.ema9 > c.ema20 else 0
         s += 2 if c.close > c.vwap else 0
         s += 1 if c.rsi >= (EARLY_RSI_LONG if early else RSI_LONG) else 0
-        s += 1 if c.adx >= MIN_ADX else 0
+        s += 1 if c.adx > MIN_ADX else 0
         s += 1 if c.di_plus > c.di_minus else 0
     else:
-        s += 2 if c.ema9 < c.ema21 else 0
+        s += 2 if c.ema9 < c.ema20 else 0
         s += 2 if c.close < c.vwap else 0
         s += 1 if c.rsi <= (EARLY_RSI_SHORT if early else RSI_SHORT) else 0
-        s += 1 if c.adx >= MIN_ADX else 0
+        s += 1 if c.adx > MIN_ADX else 0
         s += 1 if c.di_minus > c.di_plus else 0
 
     s += 1 if c.vol_ratio >= MIN_VOL_RATIO else 0
@@ -874,7 +874,7 @@ Trigger: <b>PRE-CROSSOVER MOMENTUM</b>
 
 <b>MANDATORY CONFIRMATIONS</b>
 EMA9: <b>{fmt(sig['ema9'])}</b>
-EMA21: <b>{fmt(sig['ema21'])}</b>
+EMA20: <b>{fmt(sig['ema20'])}</b>
 VWAP: <b>{fmt(sig['vwap'])}</b>
 RSI14: <b>{sig['rsi']:.1f}</b>
 ADX14: <b>{sig['adx']:.1f}</b>
@@ -886,7 +886,7 @@ Volume: {sig['vol_ratio']:.2f}x
 Expected direction: <b>BUY {side_text}</b>
 
 ⚠️ Early signal = watchlist alert.
-Wait for EMA9/EMA21 confirmation before option entry."""
+Wait for EMA9/EMA20 confirmation before option entry."""
     telegram(text)
 
 def send_confirm(asset, sig, option, reason):
@@ -906,7 +906,7 @@ Trigger: <b>{sig['trigger']}</b>
 <b>MANDATORY TECHNICALS</b>
 Spot: <b>{fmt(sig['spot'])}</b>
 EMA9: <b>{fmt(sig['ema9'])}</b>
-EMA21: <b>{fmt(sig['ema21'])}</b>
+EMA20: <b>{fmt(sig['ema20'])}</b>
 VWAP: <b>{fmt(sig['vwap'])}</b>
 RSI14: <b>{sig['rsi']:.1f}</b>
 ADX14: <b>{sig['adx']:.1f}</b>
@@ -943,7 +943,7 @@ Risk per trade: maximum 0.5-1%.
 
 <b>WHY</b>
 ✓ VWAP confirmed
-✓ EMA9 / EMA21 confirmed
+✓ EMA9 / EMA20 confirmed
 ✓ RSI14 confirmed
 ✓ ADX14 confirmed
 ✓ DI direction
@@ -974,34 +974,34 @@ def make_signal(asset):
     p = d.iloc[-2]
 
     required = [
-        c.ema9, c.ema21, c.vwap, c.rsi, c.adx,
+        c.ema9, c.ema20, c.vwap, c.rsi, c.adx,
         c.di_plus, c.di_minus, c.atr, c.vol_ratio
     ]
     if any(pd.isna(x) for x in required):
         return None, None, "INDICATOR_NOT_READY"
 
     # Mandatory VWAP/EMA/RSI/ADX rules.
-    if c.adx < MIN_ADX:
+    if c.adx <= MIN_ADX:
         return None, None, "ADX_BELOW_MIN"
 
-    cross_long = p.ema9 <= p.ema21 and c.ema9 > c.ema21
-    cross_short = p.ema9 >= p.ema21 and c.ema9 < c.ema21
+    cross_long = p.ema9 <= p.ema20 and c.ema9 > c.ema20
+    cross_short = p.ema9 >= p.ema20 and c.ema9 < c.ema20
 
     # Confirmed long/short: ALL FOUR mandatory indicators + DI.
     confirmed_long = (
-        c.ema9 > c.ema21 and
+        c.ema9 > c.ema20 and
         c.close > c.vwap and
         c.rsi >= RSI_LONG and
-        c.adx >= MIN_ADX and
+        c.adx > MIN_ADX and
         c.di_plus > c.di_minus and
         c.close > c.ema9
     )
 
     confirmed_short = (
-        c.ema9 < c.ema21 and
+        c.ema9 < c.ema20 and
         c.close < c.vwap and
         c.rsi <= RSI_SHORT and
-        c.adx >= MIN_ADX and
+        c.adx > MIN_ADX and
         c.di_minus > c.di_plus and
         c.close < c.ema9
     )
@@ -1013,38 +1013,38 @@ def make_signal(asset):
         c.close > c.open and
         c.close >= c.low + (c.high-c.low) * 0.55
     )):
-        candidates.append(("LONG", score(c, "LONG"), "EMA9/EMA21 CROSS" if cross_long else "EMA9 PULLBACK"))
+        candidates.append(("LONG", score(c, "LONG"), "EMA9/EMA20 CROSS" if cross_long else "EMA9 PULLBACK"))
 
     if confirmed_short and (cross_short or (
         c.high >= c.ema9 - c.atr * 0.25 and
         c.close < c.open and
         c.close <= c.high - (c.high-c.low) * 0.55
     )):
-        candidates.append(("SHORT", score(c, "SHORT"), "EMA9/EMA21 CROSS" if cross_short else "EMA9 PULLBACK"))
+        candidates.append(("SHORT", score(c, "SHORT"), "EMA9/EMA20 CROSS" if cross_short else "EMA9 PULLBACK"))
 
     # Early momentum: EMA gap shrinking toward crossover while price already
     # has the VWAP + RSI + ADX direction.
-    dist = abs(c.ema9 - c.ema21)
-    prev_dist = abs(p.ema9 - p.ema21)
+    dist = abs(c.ema9 - c.ema20)
+    prev_dist = abs(p.ema9 - p.ema20)
 
     early_long = (
-        c.ema9 <= c.ema21 and
+        c.ema9 <= c.ema20 and
         c.ema9 > p.ema9 and
         dist < prev_dist and
         c.close > c.vwap and
         c.rsi >= EARLY_RSI_LONG and
-        c.adx >= MIN_ADX and
+        c.adx > MIN_ADX and
         c.adx >= p.adx and
         c.di_plus >= c.di_minus
     )
 
     early_short = (
-        c.ema9 >= c.ema21 and
+        c.ema9 >= c.ema20 and
         c.ema9 < p.ema9 and
         dist < prev_dist and
         c.close < c.vwap and
         c.rsi <= EARLY_RSI_SHORT and
-        c.adx >= MIN_ADX and
+        c.adx > MIN_ADX and
         c.adx >= p.adx and
         c.di_minus >= c.di_plus
     )
@@ -1060,7 +1060,7 @@ def make_signal(asset):
                 "trigger": trigger,
                 "spot": float(c.close),
                 "ema9": float(c.ema9),
-                "ema21": float(c.ema21),
+                "ema20": float(c.ema20),
                 "vwap": float(c.vwap),
                 "rsi": float(c.rsi),
                 "adx": float(c.adx),
@@ -1081,7 +1081,7 @@ def make_signal(asset):
                 "score": sc,
                 "spot": float(c.close),
                 "ema9": float(c.ema9),
-                "ema21": float(c.ema21),
+                "ema20": float(c.ema20),
                 "vwap": float(c.vwap),
                 "rsi": float(c.rsi),
                 "adx": float(c.adx),
@@ -1155,7 +1155,7 @@ def health():
         "ok": True,
         "bot": BOT_NAME,
         "timeframe": "5m",
-        "mandatory_parameters": "VWAP + EMA9/EMA21 + RSI14 + ADX14",
+        "mandatory_parameters": "VWAP + EMA9/EMA20 + RSI14 + ADX14",
         "spot_assets": len(spot_symbols),
         "option_assets": len(option_market),
         "bars": {a: len(bars.get(a, [])) for a in spot_symbols},
@@ -1170,7 +1170,7 @@ def health():
 def test_telegram():
     ok = telegram(
         "✅ <b>TELEGRAM TEST OK</b>\n"
-        "Crypto 5M VWAP + EMA9/21 + RSI14 + ADX14 bot is connected."
+        "Crypto 5M VWAP + EMA9/20 + RSI14 + ADX14 bot is connected."
     )
     return jsonify({"telegram_ok": ok})
 
@@ -1189,7 +1189,7 @@ def debug_scan():
             snapshot[asset] = {
                 "spot": float(c.close),
                 "ema9": float(c.ema9),
-                "ema21": float(c.ema21),
+                "ema20": float(c.ema20),
                 "vwap": float(c.vwap),
                 "rsi14": float(c.rsi),
                 "adx14": float(c.adx),
@@ -1203,7 +1203,7 @@ def debug_scan():
             snapshot[asset] = {"error": str(e)}
 
     return jsonify({
-        "mandatory": ["VWAP", "EMA9/EMA21", "RSI14", "ADX14"],
+        "mandatory": ["VWAP", "EMA9/EMA20", "RSI14", "ADX14"],
         "providers": provider_status,
         "spot_assets": sorted(spot_symbols.keys()),
         "option_assets": sorted(option_market.keys()),
@@ -1229,7 +1229,7 @@ def startup_message():
 <b>MANDATORY PARAMETERS</b>
 ✓ VWAP
 ✓ EMA9
-✓ EMA21
+✓ EMA20
 ✓ RSI14
 ✓ ADX14
 
@@ -1318,7 +1318,7 @@ def main():
     print("=" * 72)
     print(BOT_NAME)
     print("=" * 72)
-    print("MANDATORY: VWAP + EMA9/EMA21 + RSI14 + ADX14")
+    print("MANDATORY: VWAP + EMA9/EMA20 + RSI14 + ADX14")
     print("TIMEFRAME: 5m")
 
     refresh_all()
